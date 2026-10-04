@@ -568,7 +568,8 @@ export const createChannelPlugin = (runtimes: RuntimeMap, pluginRuntime?: Plugin
           //
           // `kick` is core's name for `removeMember`; the rest of the manage
           // family has no core equivalent and stays gateway-only until it gets
-          // one. `joins` likewise.
+          // one. `joins` likewise, and `folders` — the account's folder list
+          // is for whoever configures `inboundFolders`, not for the agent.
           actions: [
             "send", "read", "react", "upload-file",
             // Rewriting a message this account already sent (2.29.0). Core

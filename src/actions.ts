@@ -30,6 +30,13 @@ const ACTION_ALIASES: Record<string, string> = {
   react: "react",
   joins: "joins",
 
+  // The account's Telegram folders and what `inboundFolders` resolves to
+  // (2.29.2-cp.2). Gateway RPC only, like `joins`: core has no name for it,
+  // and it is for whoever configures the account, not for the agent.
+  folders: "folders",
+  listFolders: "folders",
+  dialogFilters: "folders",
+
   // Rewriting a message already sent (2.29.0). Core has always known the name
   // — it is in `CHANNEL_MESSAGE_ACTION_NAMES` — so the call reached this
   // channel and was refused as unsupported, and a wrong answer could only be

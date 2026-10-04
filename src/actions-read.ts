@@ -15,13 +15,14 @@ import {
   resolveJoinsJournalPath,
   selectJoinRecords,
 } from "./joins";
+import { folderInventory, readAccountInboundFolders } from "./inbound-folders";
 import { describeMedia, downloadMessageMediaToFile, ensurePrivateDir, fetchMediaUnderstanding, pruneFetchedMedia, sweepOrphanMediaDirs } from "./media";
 import { resolveStateDir } from "./state-dir";
 import { parseTopicsParams } from "./topics";
 
 /**
  * The read-shaped actions: `read`, `fetch-media`, `participants`, `topics`,
- * `dialogs`, `joins`, `chatInfo`.
+ * `dialogs`, `joins`, `folders`, `chatInfo`.
  *
  * Cut out of `handleAction` in `channel.ts` unchanged — same gates, same log
  * lines, same answers; the probe in `scripts/verify/action-probe.cjs` is the
@@ -439,6 +440,35 @@ export async function handleReadAction(ctx: ActionContext): Promise<unknown> {
         returned: selected.length,
       }),
       result: (_p, selected) => ({ count: selected.length, joins: selected }),
+    });
+  }
+
+  // The account's folders, for whoever sets `inboundFolders`: id, title,
+  // icon and how each is built — counts, never the peers in it — plus what
+  // every configured entry resolves to right now, so a renamed or deleted
+  // folder shows up as `unknown` instead of as a silent inbox. No gate: a
+  // folder list is the account owner's own metadata and names no chat. Not
+  // offered to the agent either — core has no name for it, so it is reachable
+  // through gateway RPC only (`message.action`, `action: "folders"`).
+  if (canonical === "folders") {
+    return await runRead({
+      name: "folders",
+      parse: () => ({}),
+      run: async ({ accountId: foldersAccountId, gram }) => folderInventory(
+        await gram().listFolders(),
+        readAccountInboundFolders(cfg, foldersAccountId),
+      ),
+      // Counts only: folder titles are the owner's own words.
+      after: (_p, inventory) => ({
+        returned: inventory.folders.length,
+        inboundFolders: inventory.inboundFolders?.configured.length ?? 0,
+        unknown: inventory.inboundFolders?.unknown.length ?? 0,
+      }),
+      result: (_p, inventory) => ({
+        count: inventory.folders.length,
+        folders: inventory.folders,
+        inboundFolders: inventory.inboundFolders,
+      }),
     });
   }
 

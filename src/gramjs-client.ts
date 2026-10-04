@@ -23,6 +23,7 @@ import {
 import { createSubsystemLogger } from "openclaw/plugin-sdk/core";
 
 import { ExpiringMap } from "./expiring-map";
+import { dialogFilterList } from "./inbound-folders";
 import { toStringId } from "./normalize";
 
 /** Ten minutes: long enough to spare the repeat lookups of one turn,
@@ -747,6 +748,16 @@ export class GramJsClientManager {
       dialogs: normalizeDialogs(raw, { query: args.query }),
       truncated: raw.length >= args.limit,
     };
+  }
+
+  /**
+   * The account's folders (dialog filters), raw — `describeFolder` and
+   * `resolveInboundFolders` turn them into what the `folders` action reports.
+   * One call; `DialogFilterDefault` ("All chats") is in the list and is
+   * dropped by the readers, not here.
+   */
+  async listFolders(): Promise<unknown[]> {
+    return dialogFilterList(await this.client.invoke(new Api.messages.GetDialogFilters()));
   }
 
   /**

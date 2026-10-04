@@ -195,6 +195,130 @@ export function selectFolders(rules: FolderRule[], selectors: FolderSelector[]):
   return { selected: [ ...selected.values() ], unknown };
 }
 
+/**
+ * The folder list out of a `messages.getDialogFilters` answer. Layer 176
+ * wrapped the vector in `messages.dialogFilters`; either shape is taken, and
+ * anything else is an error rather than "no folders".
+ */
+export function dialogFilterList(result: any): unknown[] {
+  const raw = Array.isArray(result) ? result : result?.filters;
+  if (!Array.isArray(raw)) {
+    throw new Error("messages.getDialogFilters returned no folder list");
+  }
+  return raw;
+}
+
+/** A category a folder admits chats by; the names are the config's and Telegram's own. */
+export type FolderCategory = "contacts" | "nonContacts" | "groups" | "broadcasts" | "bots";
+export type FolderExclusion = "excludeMuted" | "excludeRead" | "excludeArchived";
+
+/**
+ * One folder as the `folders` action reports it: enough to recognise it and
+ * pick it, nothing about who is in it. Peer ids stay out — the counts say
+ * how a folder is built, and which people sit in the owner's folders is not
+ * something a list of folders needs to carry.
+ */
+export type FolderSummary = {
+  /** The id `inboundFolders` can name; stable across renames. */
+  id: number;
+  /** Plain text, as shown in Telegram (custom-emoji entities dropped). */
+  title: string;
+  /** The folder's icon emoji, when one was chosen. */
+  emoticon?: string;
+  /** The folder's colour index (layer 187+), when set. */
+  color?: number;
+  /** `chatlist` is a shared folder: hand-picked chats only, no categories. */
+  kind: "filter" | "chatlist";
+  pinnedCount: number;
+  includeCount: number;
+  excludeCount: number;
+  categories: FolderCategory[];
+  exclusions: FolderExclusion[];
+};
+
+const CATEGORIES: FolderCategory[] = [ "contacts", "nonContacts", "groups", "broadcasts", "bots" ];
+const EXCLUSIONS: FolderExclusion[] = [ "excludeMuted", "excludeRead", "excludeArchived" ];
+
+const countOf = (list: unknown) => (Array.isArray(list) ? list.length : 0);
+
+/** A folder's metadata, or `undefined` for what is not a folder one can name ({@link toFolderRule}). */
+export function describeFolder(raw: any): FolderSummary | undefined {
+  const rule = toFolderRule(raw);
+  if (!rule) {
+    return undefined;
+  }
+  const emoticon = typeof raw.emoticon === "string" && raw.emoticon.trim() ? raw.emoticon : undefined;
+  const color = typeof raw.color === "number" ? raw.color : undefined;
+  return {
+    id: rule.id,
+    title: rule.title,
+    ...(emoticon !== undefined ? { emoticon } : {}),
+    ...(color !== undefined ? { color } : {}),
+    kind: rule.chatlist ? "chatlist" : "filter",
+    pinnedCount: countOf(raw.pinnedPeers),
+    includeCount: countOf(raw.includePeers),
+    excludeCount: rule.chatlist ? 0 : countOf(raw.excludePeers),
+    categories: CATEGORIES.filter((name) => rule[ name ]),
+    exclusions: EXCLUSIONS.filter((name) => rule[ name ]),
+  };
+}
+
+/** One configured `inboundFolders` entry and the folders it names right now. */
+export type FolderSelectorResolution = {
+  selector: FolderSelector;
+  /** Empty: the entry names no folder this account has, and admits nothing. */
+  folders: Array<{ id: number; title: string }>;
+};
+
+/**
+ * What the account's `inboundFolders` resolves to against a folder list —
+ * the state the filter is in, made visible. `undefined` when the account
+ * sets no filter. A renamed folder named by title, or a deleted one, shows
+ * up in `unknown`; `effective` is the union the filter admits from.
+ */
+export type InboundFoldersState = {
+  configured: FolderSelector[];
+  entries: FolderSelectorResolution[];
+  unknown: FolderSelector[];
+  effective: Array<{ id: number; title: string }>;
+};
+
+export function resolveInboundFolders(
+  rawFilters: unknown[],
+  selectors: FolderSelector[] | undefined,
+): InboundFoldersState | undefined {
+  if (!selectors) {
+    return undefined;
+  }
+  const rules = rawFilters.map((raw) => toFolderRule(raw)).filter((rule): rule is FolderRule => Boolean(rule));
+  const entries = selectors.map((selector) => ({
+    selector,
+    folders: selectFolders(rules, [ selector ]).selected.map((rule) => ({ id: rule.id, title: rule.title })),
+  }));
+  const { selected, unknown } = selectFolders(rules, selectors);
+  return {
+    configured: selectors,
+    entries,
+    unknown,
+    effective: selected.map((rule) => ({ id: rule.id, title: rule.title })),
+  };
+}
+
+/**
+ * The answer of the `folders` action: every folder of the account, in
+ * Telegram's order, and — when the account sets `inboundFolders` — what each
+ * entry resolves to. `inboundFolders` is `null` when no filter is set.
+ */
+export function folderInventory(rawFilters: unknown[], selectors: FolderSelector[] | undefined): {
+  folders: FolderSummary[];
+  inboundFolders: InboundFoldersState | null;
+} {
+  return {
+    folders: rawFilters.map(describeFolder).filter((folder): folder is FolderSummary => Boolean(folder)),
+    inboundFolders: resolveInboundFolders(rawFilters, selectors) ?? null,
+  };
+}
+
 /** What Telegram's category rules distinguish a chat by. */
 export type PeerType = "user" | "group" | "broadcast";
 
@@ -613,12 +737,7 @@ export class InboundFolderFilter implements InboundFolderGate {
     this.inflight ??= (async () => {
       const startedAt = this.generation;
       try {
-        const result = await this.call(new Api.messages.GetDialogFilters());
-        // Layer 176 wrapped the vector in `messages.dialogFilters`; take either.
-        const raw = Array.isArray(result) ? result : result?.filters;
-        if (!Array.isArray(raw)) {
-          throw new Error("messages.getDialogFilters returned no folder list");
-        }
+        const raw = dialogFilterList(await this.call(new Api.messages.GetDialogFilters()));
         this.setRules(raw.map((item) => toFolderRule(item, this.selfId)).filter((rule): rule is FolderRule => Boolean(rule)));
         this.stale = this.generation !== startedAt;
         this.lastFailureAt = undefined;

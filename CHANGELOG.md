@@ -11,6 +11,14 @@ recorded in `git log` only.
 
 ### Added
 
+- **`folders` action** (gateway RPC only): the account's Telegram folders —
+  id, plain-text title, icon emoji and colour, kind (`filter` / `chatlist`),
+  pinned / included / excluded counts and the category and exclusion flags,
+  never the peers — and, when the account sets `inboundFolders`, what each
+  entry resolves to and which resolve to nothing. A picker can offer the
+  folders by name and store their ids, and a renamed or deleted folder is
+  visible instead of a silently empty inbox. Not offered to the agent's
+  `message` tool.
 - **`readReceipts` and `typingIndicator` on the account**, for a person's own
   account that the agent reads as a silent inbox. Every handled message used
   to be marked read — gone from the owner's unread list — and every DM showed

@@ -384,6 +384,16 @@ agent sees it.
   `clawgram skipping inbound outside inboundFolders`, with the chat, the
   message and the reason (`not-in-folder`, `excluded`, `muted`, `archived`,
   `lookup-failed`, `no-known-folder`, `folders-unavailable`).
+- **Which folders, and is the filter finding them.** The `folders` action
+  (gateway RPC only — `message.action` with `channel: "clawgram"`,
+  `action: "folders"`) lists the account's folders: `id`, `title` (plain
+  text), `emoticon` and `color` when set, `kind` (`filter`, or `chatlist`
+  for a shared folder), how many chats are pinned, included and excluded,
+  and which `categories` and `exclusions` are on — counts, never the chats
+  themselves. With `inboundFolders` set, `inboundFolders.entries` says what
+  each entry resolves to right now and `inboundFolders.unknown` lists the
+  ones that name nothing (a renamed or deleted folder). Naming folders by
+  id survives a rename; a title does not.
 
 The filter narrows what the other gates admit and never widens it. A DM
 still needs `allowFrom`; a group still needs an entry in `groups` and its own
@@ -863,9 +873,10 @@ one fails the suite rather than the chat.
 | list chats | `dialogs` | `channel-list` | `discoverChats` |
 | describe a chat | `chatInfo` | `channel-info` (the chat arrives in `channelId`) | `readChats` |
 | where the account was added | `joins` | — (gateway RPC only) | — |
+| the account's folders, and what `inboundFolders` resolves to | `folders` | — (gateway RPC only) | — |
 | chat management | see the table below | see the table below | `manageChats` |
 
-Names outside core's vocabulary (`joins`, `transferOwnership`, `inviteLink`) are reachable through
+Names outside core's vocabulary (`joins`, `folders`, `transferOwnership`, `inviteLink`) are reachable through
 the gateway RPC only. A name core does not know fails as "requires a target" and "does not accept a
 target" at once — there is no call that satisfies both, which is why this table exists.
 
