@@ -572,6 +572,11 @@
                     ]
                   },
                   "description": "Telegram chat folders whose chats may wake the agent — a folder's title as shown in Telegram (emoji included) or its numeric id. Membership is Telegram's own: the folder's chosen chats and its category rules (contacts, non-contacts, groups, channels, bots; minus excluded, muted or archived chats), read from the account and followed live as folders change. Narrows allowFrom and groups for direct and group messages alike, never widens them; history reads are unaffected. Absent or empty = no folder filter. A name that matches no folder admits nothing and is logged once."
+                },
+                "ignoreBots": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Skip direct and group messages whose sender is a bot — notifications, or the owner's own control bot answering them. Decided before any sender or folder lookup: the sender GramJS already holds answers for free, otherwise one lookup bounded to 1.5 s; a sender that cannot be looked up is taken for a person. Logged as `clawgram skipping bot sender`. Default false = unchanged."
                 }
               },
               "required": [
@@ -678,6 +683,11 @@
         "accounts.*.inboundFolders": {
           "label": "Inbound Folders",
           "help": "Only chats in these Telegram folders (title or id) wake the agent. Narrows allowFrom and groups; never widens them. Empty = every chat.",
+          "advanced": true
+        },
+        "accounts.*.ignoreBots": {
+          "label": "Ignore Bots",
+          "help": "Skip messages sent by bots (notifications, your own control bot). A sender that cannot be looked up counts as a person.",
           "advanced": true
         }
       }

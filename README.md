@@ -270,6 +270,7 @@ loud where it does occur.
 | `readReceipts` | boolean | `true` | Mark a message read when the agent handles it. `false` leaves it unread in the account's own Telegram and shows the sender no receipt — see [A quiet inbox](#a-quiet-inbox) |
 | `typingIndicator` | `"addressed"` \| `"never"` | `"addressed"` | When the sender sees "typing…" during a turn: only for a message that addressed the agent (every DM does), or never — see [A quiet inbox](#a-quiet-inbox) |
 | `inboundFolders` | (string \| number)[] | unset | Only chats in these Telegram folders wake the agent — folder titles (emoji included) or numeric ids, evaluated with the folder's own rules and followed live. Narrows `allowFrom` and `groups`, never widens them; `read` is unaffected. Absent or `[]` = no folder filter — see [Only the chats in a folder](#only-the-chats-in-a-folder) |
+| `ignoreBots` | boolean | `false` | Skip direct and group messages sent by a bot — notifications, or the owner's own control bot answering them. A sender that cannot be looked up counts as a person — see [Messages from bots](#messages-from-bots) |
 | `reactionModel` | string | unset | Model ref or alias for the emoji pick on a silent mention. Unset = the agent's own model. Needs `plugins.entries.clawgram.llm.allowModelOverride: true` in the gateway config; without it the override is refused and the pick quietly falls back to the default model |
 
 Group config fields:
@@ -392,6 +393,37 @@ is. The check runs after the gates that cost nothing and before anything
 that asks Telegram about the sender or downloads an attachment. `read`,
 `channel-list` and every other action are unaffected: the folder decides
 what wakes the agent, not what it may look up when asked.
+
+### Messages from bots
+
+A person's own account receives a bot's messages like anyone else's:
+notifications, and — when the owner also talks to the agent through a
+control bot — every answer that bot sends them. Read as an inbox, each of
+those is a turn spent on a message no person wrote. `ignoreBots: true` drops
+them before the agent sees them, in DMs and groups alike.
+
+```json
+"accounts": {
+  "default": {
+    "ignoreBots": true
+  }
+}
+```
+
+- **Cost.** The check runs right after the gates that cost nothing and
+  before the folder filter and any sender lookup. The sender GramJS already
+  holds (from its entity cache) answers for free; without one, a single
+  `getSender()` is made, bounded to 1.5 seconds.
+- **Fails open for people.** A sender that cannot be looked up — the call
+  fails, times out or returns nothing — is taken for a person and the
+  message goes on to the other gates: losing a person's message is the worse
+  mistake, and a bot that slips through costs one turn.
+- **Logged.** Each skip is an info line, `clawgram skipping bot sender`, with
+  the chat, the message and the sender id.
+
+Default `false`: bots are treated like everyone else, as before. The setting
+narrows what `allowFrom` and `groups` admit and never widens it; actions such
+as `read` are unaffected.
 
 ### Per-group tools, skills and system prompt
 

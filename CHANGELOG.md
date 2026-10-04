@@ -32,6 +32,14 @@ recorded in `git log` only.
   fails closed: an unknown folder name admits nothing (logged once), a
   failed lookup skips the message. `read` and the other actions are
   unaffected. Absent or empty keeps the behaviour unchanged.
+- **`ignoreBots` on the account**: direct and group messages sent by a bot
+  — notifications, or the owner's own control bot answering them — never
+  reach the agent. The check sits after the gates that cost nothing and
+  before the folder filter and any sender lookup: the sender GramJS already
+  holds answers for free, otherwise one `getSender()` bounded to 1.5 s. A
+  sender that cannot be looked up counts as a person. Skips are logged as
+  `clawgram skipping bot sender`. Default `false` keeps the behaviour
+  unchanged.
 
 ### Fixed
 

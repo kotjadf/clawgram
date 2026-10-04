@@ -327,6 +327,16 @@ describe("account schema accepts what the code reads", () => {
   test("inboundFolders has a ui hint", () => {
     assert.ok(channelUiHints[ "accounts.*.inboundFolders" ]?.label);
   });
+
+  test("ignoreBots is a boolean, and has a ui hint", () => {
+    for (const ignoreBots of [ true, false ]) {
+      const result = validateAccount({ ...BASE_ACCOUNT, ignoreBots }) as ValidationResult;
+      assert.equal(result.ok, true, errorText(result));
+    }
+    const text = validateAccount({ ...BASE_ACCOUNT, ignoreBots: "yes" }) as ValidationResult;
+    assert.equal(text.ok, false, "a string where a boolean belongs should be refused");
+    assert.ok(channelUiHints[ "accounts.*.ignoreBots" ]?.label);
+  });
 });
 
 describe("openclaw.plugin.json credential uiHints", () => {

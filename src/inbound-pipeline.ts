@@ -56,6 +56,8 @@ import {
   readAccountReactionLevel,
   readAccountReactionModel,
   readAccountInboundPresence,
+  readAccountIgnoreBots,
+  isBotSender,
 } from './helpers';
 import { CHANNEL_ID } from './constants';
 import {
@@ -280,6 +282,22 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
         });
         return;
       }
+    }
+
+    // `ignoreBots`: a bot's message (a notification, the owner's own control
+    // bot answering them) never reaches the agent. After the gates above,
+    // which cost nothing, and before the folder lookups and the sender
+    // profile: the sender GramJS already holds answers for free, and the one
+    // lookup made without it is bounded. A sender that cannot be looked up
+    // is taken for a person (see isBotSender).
+    if (readAccountIgnoreBots(cfg, accountId) && await isBotSender(rawMessage, 1500)) {
+      log?.info?.("clawgram skipping bot sender", {
+        accountId,
+        chatId: normalized.chatId,
+        messageId: normalized.messageId,
+        senderId: normalized.senderId,
+      });
+      return;
     }
 
     // `inboundFolders`: only chats in the named Telegram folders get further.

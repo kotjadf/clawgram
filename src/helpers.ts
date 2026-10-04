@@ -1192,3 +1192,42 @@ export function readAccountInboundPresence(cfg: any, accountId?: string | null):
     typingIndicator: account?.typingIndicator === "never" ? "never" : "addressed",
   };
 }
+
+/**
+ * Whether the account skips messages sent by bots (`ignoreBots`, default off).
+ *
+ * A person's own account receives a bot's messages like anyone else's:
+ * notifications, and — when the owner also talks to the agent through a
+ * control bot — every answer that bot sends them. Read as an inbox, each of
+ * those is a turn spent on a message no person wrote.
+ */
+export function readAccountIgnoreBots(cfg: any, accountId?: string | null): boolean {
+  const resolvedAccountId = resolveConfiguredAccountId(cfg, accountId);
+  const account = resolvedAccountId ? cfg?.channels?.[ CHANNEL_ID ]?.accounts?.[ resolvedAccountId ] : undefined;
+  return account?.ignoreBots === true;
+}
+
+/**
+ * Whether a message was sent by a bot, for `ignoreBots`.
+ *
+ * The sender GramJS already holds (`_sender` / `sender`, filled from its
+ * entity cache) answers for free; only without one is `getSender()` asked,
+ * and that lookup gives up after `timeoutMs`. A lookup that fails, hangs or
+ * returns nothing counts as "not a bot": skipping a person's message is the
+ * worse mistake, and a bot that gets through only costs one turn.
+ */
+export async function isBotSender(message: any, timeoutMs = 1500): Promise<boolean> {
+  const cached = message?._sender ?? message?.sender;
+  if (cached && typeof cached === "object") {
+    return cached.bot === true;
+  }
+  if (typeof message?.getSender !== "function") {
+    return false;
+  }
+  try {
+    const sender = await withTimeout(Promise.resolve(message.getSender()), timeoutMs);
+    return (sender as any)?.bot === true;
+  } catch {
+    return false;
+  }
+}
