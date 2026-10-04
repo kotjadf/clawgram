@@ -271,6 +271,8 @@ loud where it does occur.
 | `typingIndicator` | `"addressed"` \| `"never"` | `"addressed"` | When the sender sees "typing…" during a turn: only for a message that addressed the agent (every DM does), or never — see [A quiet inbox](#a-quiet-inbox) |
 | `inboundFolders` | (string \| number)[] | unset | Only chats in these Telegram folders wake the agent — folder titles (emoji included) or numeric ids, evaluated with the folder's own rules and followed live. Narrows `allowFrom` and `groups`, never widens them; `read` is unaffected. Absent or `[]` = no folder filter — see [Only the chats in a folder](#only-the-chats-in-a-folder) |
 | `ignoreBots` | boolean | `false` | Skip direct and group messages sent by a bot — notifications, or the owner's own control bot answering them. A sender that cannot be looked up counts as a person — see [Messages from bots](#messages-from-bots) |
+| `inboundAsRoomEvent` | boolean | `false` | Hand direct and admitted group messages to core as room events: a reply is optional, only the `message` tool speaks, and the channel shows nothing on the turn's behalf — see [A silent inbox that holds both sides](#a-silent-inbox-that-holds-both-sides) |
+| `recordOutgoing` | boolean | `false` | Record the owner's own messages into the conversation's session as silent room events, gated by the peer — see [A silent inbox that holds both sides](#a-silent-inbox-that-holds-both-sides) |
 | `reactionModel` | string | unset | Model ref or alias for the emoji pick on a silent mention. Unset = the agent's own model. Needs `plugins.entries.clawgram.llm.allowModelOverride: true` in the gateway config; without it the override is refused and the pick quietly falls back to the default model |
 
 Group config fields:
@@ -440,6 +442,76 @@ them before the agent sees them, in DMs and groups alike.
 Default `false`: bots are treated like everyone else, as before. The setting
 narrows what `allowFrom` and `groups` admit and never widens it; actions such
 as `read` are unaffected.
+
+### A silent inbox that holds both sides
+
+An agent that reads a person's account as an inbox stays silent most of the
+time and answers only when a rule of the owner's says so. Two settings fit
+the channel to that (OpenClaw 2026.9 or later):
+
+```json
+"accounts": {
+  "default": {
+    "allowFrom": ["*"],
+    "inboundAsRoomEvent": true,
+    "recordOutgoing": true,
+    "readReceipts": false,
+    "typingIndicator": "never"
+  }
+}
+```
+
+**`inboundAsRoomEvent`.** Core treats a direct message as a turn that owes a
+reply: a model that decides to say nothing ends it with an "empty response"
+error, or — with model fallbacks — with core's own "produced no usable reply"
+notice. With this setting each admitted direct and group message reaches core
+as a *room event* (`InboundEventKind: "room_event"`):
+
+- the turn still runs, in the same session as before, and a reply is optional;
+- core records the message as one line, `#<message id> <sender>: <text>`, and
+  keeps the turn's final text out of the transcript and out of the chat;
+- anything visible has to go out through the `message` tool (core adds it to
+  the turn); the prompt carries core's own "stay silent unless…" rule;
+- commands are not interpreted — a contact typing `/reset` is text;
+- the channel delivers nothing on the turn's behalf: no reply text, no typing
+  indicator, no transcript fallback, no silent-mention reaction. Read
+  receipts still follow `readReceipts`.
+
+The gates are unchanged: `allowFrom`, `groups` with their `groupPolicy`,
+`ignoreBots` and `inboundFolders` decide what is admitted exactly as before.
+
+**`recordOutgoing`.** Telegram reports what the owner writes from their own
+phone as outgoing messages, and the channel used to skip them — so a session
+held only the other side of a conversation. With this setting each one is
+dispatched as a room event into the session the other side's messages go to,
+spoken by the owner:
+
+- **Same session.** A direct message routes by its peer — the contact — with
+  the same `From`, `To` and originating target an inbound message from them
+  carries, so core's router gives the same session key (with any `dmScope`).
+  A group message routes by the group, as the group's own messages do.
+- **Recorded as** `#<message id> <account> (owner): <text>`, e.g.
+  `#912 @me (owner): Буду через час`. The turn carries no `SenderId`, so an
+  `ownerAllowFrom` naming the owner's Telegram id cannot make it an
+  owner-authorized turn; commands are not interpreted.
+- **Gates judge the conversation**, since the sender is always the owner: a
+  direct chat is recorded only if its peer passes `allowFrom` (ids and
+  handles of the peer), is not a bot under `ignoreBots`, and is inside
+  `inboundFolders`. A group is recorded only if it has an enabled `groups`
+  entry with `groupPolicy: "open"` — the one rung where everyone else's
+  unaddressed messages are read too — and is inside `inboundFolders`.
+- **Never recorded:** Saved Messages, the Telegram service chat, channels,
+  and messages this process sent itself — the agent's own sends are already
+  in the session that made them (the client remembers what it sent, and an
+  update that overtakes its send waits up to 15 s for it to finish).
+- **No output.** Whatever the turn produces is dropped by the channel; no
+  typing indicator, no read receipt.
+- **Cost.** Each recorded message is one agent turn — core has no way for a
+  plugin to write history without one. Skips are logged as
+  `clawgram not recording outgoing message` with a `reason`.
+
+Messages from before the account was connected are not replayed; the agent
+can read them with `read` (up to 500 per call, each with `isOutgoing`).
 
 ### Per-group tools, skills and system prompt
 

@@ -1,12 +1,12 @@
 {
   "name": "clawgram",
-  "version": "2.29.2-cp.3",
+  "version": "2.29.2-cp.4",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "clawgram",
-      "version": "2.29.2-cp.3",
+      "version": "2.29.2-cp.4",
       "license": "MIT",
       "dependencies": {
         "json5": "2.2.3",

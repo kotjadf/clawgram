@@ -2,7 +2,7 @@
   "id": "clawgram",
   "name": "Clawgram",
   "description": "Clawgram — personal Telegram (MTProto userbot) channel for OpenClaw. Your AI assistant reads and responds as you.",
-  "version": "2.29.2-cp.3",
+  "version": "2.29.2-cp.4",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -577,6 +577,16 @@
                   "type": "boolean",
                   "default": false,
                   "description": "Skip direct and group messages whose sender is a bot — notifications, or the owner's own control bot answering them. Decided before any sender or folder lookup: the sender GramJS already holds answers for free, otherwise one lookup bounded to 1.5 s; a sender that cannot be looked up is taken for a person. Logged as `clawgram skipping bot sender`. Default false = unchanged."
+                },
+                "inboundAsRoomEvent": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Hand direct and admitted group messages to core as room events (InboundEventKind \"room_event\", OpenClaw 2026.9): the turn still runs, a reply is optional instead of owed, the final text stays out of the chat and the transcript, and anything visible goes out only through the `message` tool. The event is recorded in the session as `#<id> <sender>: <text>`; commands are not interpreted. The channel then delivers nothing on the turn's behalf — no reply text, no typing indicator, no transcript fallback, no silent-mention reaction. For an account the agent reads as an inbox. Default false = unchanged."
+                },
+                "recordOutgoing": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Record the owner's own messages — sent from their Telegram, not by the agent — into the conversation's session as silent room events, so an inbox holds both sides. A direct message goes to the session the peer's messages go to (same route peer, same session key) and is recorded as `#<id> <account> (owner): <text>`; the gates judge the peer: allowFrom, ignoreBots and inboundFolders. In a group: only a configured, enabled group with groupPolicy \"open\", inside inboundFolders. Saved Messages, the service chat, channels and the agent's own sends are never recorded; nothing the turn produces is delivered. Each recorded message is one agent turn. Default false = unchanged."
                 }
               },
               "required": [
@@ -688,6 +698,16 @@
         "accounts.*.ignoreBots": {
           "label": "Ignore Bots",
           "help": "Skip messages sent by bots (notifications, your own control bot). A sender that cannot be looked up counts as a person.",
+          "advanced": true
+        },
+        "accounts.*.inboundAsRoomEvent": {
+          "label": "Inbound as Room Events",
+          "help": "Messages reach the agent as room events: a reply is optional, only the message tool speaks, and the channel shows nothing (no reply, typing or reaction) on the turn's behalf. For a silent inbox.",
+          "advanced": true
+        },
+        "accounts.*.recordOutgoing": {
+          "label": "Record Own Messages",
+          "help": "Your own messages to a contact (and in open groups) are recorded into that conversation's session as silent room events, so the inbox holds both sides. Each one is an agent turn.",
           "advanced": true
         }
       }

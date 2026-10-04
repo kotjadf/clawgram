@@ -57,6 +57,8 @@ import {
   readAccountReactionModel,
   readAccountInboundPresence,
   readAccountIgnoreBots,
+  readAccountInboundAsRoomEvent,
+  readAccountRecordOutgoing,
   isBotSender,
 } from './helpers';
 import { CHANNEL_ID } from './constants';
@@ -64,6 +66,8 @@ import {
   readInboundAttachment,
   } from "./attachments";
 import type { InboundFolderGate } from "./inbound-folders";
+import { recordOutgoingEvent } from "./outgoing-pipeline";
+import { roomEventContext } from "./room-event";
 
 /**
  * Wires `reactToSilentMention` to this account's runtime, config and log.
@@ -233,6 +237,14 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
     }
 
     if (normalized.isOutgoing) {
+      // `recordOutgoing`: what the owner writes from their own Telegram goes
+      // into the conversation's session as a silent room event, so an inbox
+      // holds both sides. See src/outgoing-pipeline.ts.
+      if (readAccountRecordOutgoing(cfg, accountId)
+        && (normalized.chatType === "direct" || normalized.chatType === "group")) {
+        await recordOutgoingEvent(event, normalized, ctx);
+        return;
+      }
       if (normalized.chatType === "direct") {
         log?.info?.("clawgram skipping outgoing direct event", {
           accountId,
@@ -479,6 +491,11 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
 
     const senderUsername = normalized.senderUsername;
     const senderLabel = normalized.senderDisplay || normalized.senderUsername || senderId;
+    // `inboundAsRoomEvent`: the turn is core's room event — the reply is
+    // optional, the final text stays private, and only the `message` tool
+    // speaks. Nothing below may then put words or a typing indicator into
+    // the chat on the turn's behalf.
+    const asRoomEvent = readAccountInboundAsRoomEvent(cfg, accountId);
     const conversationTarget = normalized.chatType === "direct"
       ? normalized.chatId
       : normalized.replyTarget ?? normalized.chatId;
@@ -711,6 +728,9 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
         GroupSystemPrompt: groupConfig.systemPrompt,
         OriginatingChannel: "clawgram",
         OriginatingTo: conversationRouteTarget,
+        ...(asRoomEvent
+          ? roomEventContext({ messageId: normalized.messageId, speaker: groupReplyAddress ?? groupSenderLabel, text })
+          : {}),
       });
       rememberGroupReplyAddress({
         accountId: route.accountId ?? accountId,
@@ -771,6 +791,12 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
           dispatcherOptions: {
             ...replyPipeline,
             deliver: async (payload) => {
+              if (asRoomEvent) {
+                log?.info?.("clawgram suppressing room-event delivery", {
+                  accountId, chatId: normalized.chatId, messageId: normalized.messageId,
+                });
+                return;
+              }
               const outboundText = typeof payload.text === "string" ? payload.text.trim() : "";
               log?.info?.("clawgram deliver group payload", {
                 accountId,
@@ -832,7 +858,10 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
           (dispatchCounts.block ?? 0) === 0 &&
           (dispatchCounts.final ?? 0) === 0;
 
-        if (nothingDelivered) {
+        // A room event delivers nothing by design: its final text is private
+        // and visible words go through the `message` tool. Neither the
+        // transcript fallback nor the silent-mention reaction applies.
+        if (nothingDelivered && !asRoomEvent) {
           const fallbackText = readLatestAssistantFallbackFromTranscript(route.sessionKey, storePath, dispatchStartedAt);
           // A suppressed silent reply legitimately delivers nothing, so
           // this fallback fires right after it. Without the same check
@@ -921,7 +950,7 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
         // to someone who addressed her. Under `open` the turn runs on
         // every message in the chat, so without this the whole room
         // watches her "type" through conversations she is only reading.
-        typing: presence.typingIndicator === "addressed"
+        typing: !asRoomEvent && presence.typingIndicator === "addressed"
           && (mentionDecision.effectiveWasMentioned || wasReplyToSelf),
         read: presence.readReceipts,
       });
@@ -1005,7 +1034,7 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
         rawBody: text,
         messageId: normalized.messageId,
         timestamp: normalized.timestamp,
-        commandAuthorized: access.commandAuthorized,
+        commandAuthorized: asRoomEvent ? false : access.commandAuthorized,
         provider: "telegram",
         surface: "clawgram",
         originatingChannel: "clawgram",
@@ -1021,8 +1050,18 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
           ReplyToBody: replyParent.body,
           ReplyToSender: replyParent.sender,
           NativeChannelId: normalized.chatId,
+          // Spread last by core, so these win over its own defaults.
+          ...(asRoomEvent
+            ? roomEventContext({ messageId: normalized.messageId, speaker: senderLabel, text })
+            : {}),
         },
         deliver: async (payload) => {
+          if (asRoomEvent) {
+            log?.info?.("clawgram suppressing room-event delivery", {
+              accountId, chatId: normalized.chatId, messageId: normalized.messageId,
+            });
+            return;
+          }
           // Тот же фильтр, что у группового ответа: личный ответ идёт
           // третьим путём, и закрытие A5-11 его не покрывало (B5-01).
           const visibleText = visibleReplyText({
@@ -1058,8 +1097,9 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
       });
     }, {
       readMessageId: Number(normalized.messageId),
-      // A DM always addresses the agent, so `addressed` means typing here.
-      typing: presence.typingIndicator === "addressed",
+      // A DM always addresses the agent, so `addressed` means typing here —
+      // unless it is a room event, which owes no answer to type.
+      typing: !asRoomEvent && presence.typingIndicator === "addressed",
       read: presence.readReceipts,
     });
 

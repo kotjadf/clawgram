@@ -11,6 +11,25 @@ recorded in `git log` only.
 
 ### Added
 
+- **`inboundAsRoomEvent` on the account** (OpenClaw 2026.9+): admitted direct
+  and group messages reach core as room events (`InboundEventKind:
+  "room_event"`), so a silent turn is normal instead of an "empty response"
+  failure. Core records the message as `#<id> <sender>: <text>`, keeps the
+  final text private and leaves the `message` tool as the only way to speak;
+  commands are not interpreted. The channel delivers nothing for such a turn
+  — no reply text, typing indicator, transcript fallback or silent-mention
+  reaction. Default `false` keeps the behaviour unchanged.
+- **`recordOutgoing` on the account**: the owner's own messages (outgoing,
+  not sent by this process) are dispatched as silent room events into the
+  conversation's session — a DM by its peer, with the same From/To and
+  originating target as the peer's inbound messages and so the same session
+  key; a group by the group — recorded as `#<id> <account> (owner): <text>`
+  with no `SenderId`. Gates judge the conversation: the peer's `allowFrom`,
+  `ignoreBots` and `inboundFolders` for a DM; an enabled `groups` entry with
+  `groupPolicy: "open"` and `inboundFolders` for a group. Saved Messages, the
+  service chat, channels and the agent's own sends (the client now remembers
+  what `sendText`/`sendMedia` sent) are never recorded, and nothing the turn
+  produces is delivered. Default `false` keeps the behaviour unchanged.
 - **`clawgram.folders` gateway method** (scope `operator.read`, params
   `{ accountId?: string }`): the `folders` action's answer over the plugin's
   own gateway method. `message.action` refuses actions core has no name for

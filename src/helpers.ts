@@ -1231,3 +1231,88 @@ export async function isBotSender(message: any, timeoutMs = 1500): Promise<boole
     return false;
   }
 }
+
+/**
+ * Whether the account hands its inbound turns to core as room events
+ * (`inboundAsRoomEvent`, default off).
+ *
+ * A direct message is a turn that owes a reply in core's eyes: a model that
+ * decides to stay silent ends it with "empty response" or core's own
+ * "produced no usable reply" notice. For an account the agent reads as an
+ * inbox — where silence is the usual outcome — that is wrong. A room event is
+ * core's shape for "something happened here; answer only if you mean to":
+ * the turn still runs, its final text stays private, and anything visible
+ * goes out through the `message` tool.
+ */
+export function readAccountInboundAsRoomEvent(cfg: any, accountId?: string | null): boolean {
+  const resolvedAccountId = resolveConfiguredAccountId(cfg, accountId);
+  const account = resolvedAccountId ? cfg?.channels?.[ CHANNEL_ID ]?.accounts?.[ resolvedAccountId ] : undefined;
+  return account?.inboundAsRoomEvent === true;
+}
+
+/**
+ * Whether the owner's own messages are recorded into the conversation's
+ * session (`recordOutgoing`, default off).
+ *
+ * The owner writes from their phone; Telegram hands those messages to this
+ * session as outgoing. Until this setting they were skipped, so an inbox
+ * session held only the other side of every conversation.
+ */
+export function readAccountRecordOutgoing(cfg: any, accountId?: string | null): boolean {
+  const resolvedAccountId = resolveConfiguredAccountId(cfg, accountId);
+  const account = resolvedAccountId ? cfg?.channels?.[ CHANNEL_ID ]?.accounts?.[ resolvedAccountId ] : undefined;
+  return account?.recordOutgoing === true;
+}
+
+/**
+ * The user on the other end of a direct chat, from the entities GramJS
+ * already attached to the message — or `undefined`.
+ *
+ * For an outgoing message `_sender` is the account itself, so only an entity
+ * whose id is the chat's own counts. A `min` user is a partial copy and is
+ * not trusted for the bot flag.
+ */
+export function cachedPeerUser(message: any, peerId: string): any | undefined {
+  for (const entity of [ message?._chat, message?.chat ]) {
+    if (!entity || typeof entity !== "object" || entity.min === true) continue;
+    if (entity.className !== undefined && entity.className !== "User") continue;
+    if (String(entity.id ?? "") !== peerId) continue;
+    return entity;
+  }
+  return undefined;
+}
+
+/**
+ * The peer of a direct chat as a person: bot flag, handle and display name.
+ *
+ * The cached entity answers for free; without one, `getChat()` is asked once
+ * and abandoned after `timeoutMs`. A lookup that fails leaves everything
+ * unknown — `bot: false` included, for the same reason as `isBotSender`:
+ * dropping a person's conversation is the worse mistake.
+ */
+export async function resolveDirectPeer(message: any, peerId: string, timeoutMs = 1500): Promise<{
+  bot: boolean;
+  username?: string;
+  display?: string;
+}> {
+  let user = cachedPeerUser(message, peerId);
+  if (!user && typeof message?.getChat === "function") {
+    try {
+      const chat = await withTimeout(Promise.resolve(message.getChat()), timeoutMs);
+      user = cachedPeerUser({ _chat: chat }, peerId);
+    } catch {
+      user = undefined;
+    }
+  }
+  if (!user) {
+    return { bot: false };
+  }
+  const display = [ user.firstName, user.lastName ]
+    .filter((part: unknown) => typeof part === "string" && part.trim())
+    .join(" ").trim();
+  return {
+    bot: user.bot === true,
+    username: resolveActiveUsername(user),
+    display: display || undefined,
+  };
+}

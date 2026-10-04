@@ -23,6 +23,7 @@ import {
 import { createSubsystemLogger } from "openclaw/plugin-sdk/core";
 
 import { ExpiringMap } from "./expiring-map";
+import { OwnSendTracker } from "./own-sends";
 import { dialogFilterList } from "./inbound-folders";
 import { toStringId } from "./normalize";
 
@@ -220,6 +221,15 @@ export class GramJsClientManager {
   private proxy: TelegramProxyConfig | undefined;
   private started = false;
   private connected = false;
+  /**
+   * What this process sent itself — see `isOwnSend`. Lazy, like the peer
+   * cache: a manager built without its constructor still tracks.
+   */
+  private ownSendsStore?: OwnSendTracker;
+  private get ownSends(): OwnSendTracker {
+    this.ownSendsStore ??= new OwnSendTracker();
+    return this.ownSendsStore;
+  }
 
   constructor(private readonly config: PluginConfig) {
     // Credentials may be written as SecretRefs; account start-up resolves them
@@ -484,7 +494,7 @@ export class GramJsClientManager {
       return last as Awaited<ReturnType<typeof this.client.sendMessage>>;
     }
 
-    return this.client.sendMessage(resolved.peer as any, {
+    return this.ownSends.track(() => this.client.sendMessage(resolved.peer as any, {
       // In html mode the text is rendered first: the agent writes markdown,
       // Telegram HTML, or both, and GramJS's HTML parser alone would ship
       // the markdown as literal asterisks (2026-08-12 00:13 UTC, a whole
@@ -500,7 +510,16 @@ export class GramJsClientManager {
           ? { parseMode: args.parseMode === "markdown" ? "md" : "html" }
           : {}),
       ...replyParams,
-    });
+    }));
+  }
+
+  /**
+   * Whether a message in `chatId` was sent by this process — the agent's own
+   * send, not the owner typing elsewhere (`recordOutgoing`). Waits, bounded,
+   * for sends still in flight: the update can overtake the send's result.
+   */
+  isOwnSend(chatId: string, messageId: string, timeoutMs?: number): Promise<boolean> {
+    return this.ownSends.isOwnSend(chatId, messageId, timeoutMs);
   }
 
   /**
@@ -972,7 +991,7 @@ export class GramJsClientManager {
       return sent;
     }
 
-    return this.client.sendFile(resolved.peer as any, {
+    return this.ownSends.track(() => this.client.sendFile(resolved.peer as any, {
       // Bytes core read through its scoped reader keep the file's own name;
       // a bare Buffer would reach Telegram as "unnamed" (B5-14).
       file: typeof args.file === "string"
@@ -992,7 +1011,7 @@ export class GramJsClientManager {
           : {}),
       ...replyParams,
       ...buildVoiceNoteParams(args.asVoice),
-    });
+    }));
   }
 
   // ---- Chat management (2.12.0) ----
