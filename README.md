@@ -269,6 +269,7 @@ loud where it does occur.
 | `twoFaPassword` | string \| SecretRef | unset | The account's Telegram 2FA password; read only by `transferOwnership` |
 | `readReceipts` | boolean | `true` | Mark a message read when the agent handles it. `false` leaves it unread in the account's own Telegram and shows the sender no receipt — see [A quiet inbox](#a-quiet-inbox) |
 | `typingIndicator` | `"addressed"` \| `"never"` | `"addressed"` | When the sender sees "typing…" during a turn: only for a message that addressed the agent (every DM does), or never — see [A quiet inbox](#a-quiet-inbox) |
+| `inboundFolders` | (string \| number)[] | unset | Only chats in these Telegram folders wake the agent — folder titles (emoji included) or numeric ids, evaluated with the folder's own rules and followed live. Narrows `allowFrom` and `groups`, never widens them; `read` is unaffected. Absent or `[]` = no folder filter — see [Only the chats in a folder](#only-the-chats-in-a-folder) |
 | `reactionModel` | string | unset | Model ref or alias for the emoji pick on a silent mention. Unset = the agent's own model. Needs `plugins.entries.clawgram.llm.allowModelOverride: true` in the gateway config; without it the override is refused and the pick quietly falls back to the default model |
 
 Group config fields:
@@ -332,6 +333,65 @@ The two are independent. Neither changes what the agent does — only what the
 sender is shown while it does it. Replies the agent does send are still sent,
 and in groups a silent mention can still leave a reaction unless
 `reactionLevel` is `"off"`.
+
+### Only the chats in a folder
+
+An owner who reads one Telegram folder — say "❤️" — usually wants the agent
+to read the same thing, not every chat the account is in. `inboundFolders`
+names those folders; a message from any other chat is dropped before the
+agent sees it.
+
+```json
+"accounts": {
+  "default": {
+    "allowFrom": ["*"],
+    "groups": { "*": { "groupPolicy": "open", "allowFrom": ["*"] } },
+    "inboundFolders": ["❤️"],
+    "readReceipts": false,
+    "typingIndicator": "never"
+  }
+}
+```
+
+- **Names.** A string is a folder title, matched exactly — emoji count, an
+  invisible emoji variation selector (U+FE0F) does not; a number is a folder
+  id. Several entries mean any of those folders. A name the account does not
+  have admits nothing, and the log says so once, with the folders it does
+  have (`clawgram inboundFolders names a folder this account does not have`).
+- **Membership is Telegram's.** The folder's chosen and pinned chats are in;
+  its excluded chats are out, whatever else is true of them. Chats Telegram
+  adds by rule are in too: contacts, non-contacts, groups (basic and
+  supergroups), channels and bots, as the folder ticks them — minus muted
+  chats if it excludes muted ones (a message that mentions the account still
+  gets through, as Telegram keeps such a chat in the folder) and minus
+  archived chats if it excludes archived ones. "Exclude read" never drops a
+  message: the chat has just received one, so it is unread. Shared folders
+  (chat lists) contribute their chats.
+- **Live.** The folders are read on first use, re-read when Telegram reports
+  a folder change, and every ten minutes in case an update was missed.
+  Moving a chat into the folder on the phone takes effect on its next
+  message, without a restart.
+- **Cost.** Chats listed in the folder cost nothing per message. A chat that
+  gets in by rule may need one `getPeerDialogs` call for its mute and
+  archive state (and, rarely, whether the sender is a contact), plus one
+  `getNotifySettings` when the chat follows its type's default; both are
+  cached for minutes and dropped when Telegram reports a change. At most
+  four calls for a message, none once warm, each giving up after five
+  seconds.
+- **Fails closed.** A lookup that fails or times out skips the message and
+  logs why. The skip itself is an info line,
+  `clawgram skipping inbound outside inboundFolders`, with the chat, the
+  message and the reason (`not-in-folder`, `excluded`, `muted`, `archived`,
+  `lookup-failed`, `no-known-folder`, `folders-unavailable`).
+
+The filter narrows what the other gates admit and never widens it. A DM
+still needs `allowFrom`; a group still needs an entry in `groups` and its own
+`allowFrom` and `groupPolicy`. To let in exactly the folder's groups, give
+`groups` a `"*"` entry as above — the folder then decides which groups that
+is. The check runs after the gates that cost nothing and before anything
+that asks Telegram about the sender or downloads an attachment. `read`,
+`channel-list` and every other action are unaffected: the folder decides
+what wakes the agent, not what it may look up when asked.
 
 ### Per-group tools, skills and system prompt
 

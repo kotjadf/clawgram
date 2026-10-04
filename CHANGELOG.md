@@ -19,6 +19,19 @@ recorded in `git log` only.
   "never"` shows no indicator in DMs or groups. The defaults (`true`,
   `"addressed"`) keep the behaviour unchanged. `withTyping` takes a matching
   `read: false`.
+- **`inboundFolders` on the account**: only chats in the named Telegram
+  folders wake the agent, for an owner who reads one folder and wants the
+  agent to read the same. Folders are named by title (emoji included) or id
+  and evaluated with Telegram's own rules — chosen, pinned and excluded
+  chats, the contacts / non-contacts / groups / channels / bots categories,
+  and the exclude-muted and exclude-archived switches. They are read from
+  the account on first use, followed through folder, notification and
+  archive updates, and re-read every ten minutes. The filter applies to
+  direct and group messages, narrows `allowFrom` and `groups` without ever
+  widening them, runs before any sender lookup or attachment fetch, and
+  fails closed: an unknown folder name admits nothing (logged once), a
+  failed lookup skips the message. `read` and the other actions are
+  unaffected. Absent or empty keeps the behaviour unchanged.
 
 ### Fixed
 

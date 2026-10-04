@@ -309,6 +309,24 @@ describe("account schema accepts what the code reads", () => {
     const typing = validateAccount({ ...BASE_ACCOUNT, typingIndicator: "always" }) as ValidationResult;
     assert.equal(typing.ok, false, "an unknown typing mode should be refused by the schema");
   });
+
+  test("inboundFolders takes folder titles (emoji included) and numeric ids, or nothing", () => {
+    for (const inboundFolders of [ [ "❤️" ], [ 2 ], [ "❤️ Inbox", 3, "Work" ], [] ]) {
+      const result = validateAccount({ ...BASE_ACCOUNT, inboundFolders }) as ValidationResult;
+      assert.equal(result.ok, true, errorText(result));
+    }
+  });
+
+  test("inboundFolders refuses what the code would drop", () => {
+    for (const inboundFolders of [ "❤️", [ "" ], [ 1.5 ], [ -1 ], [ true ], [ { title: "❤️" } ] ]) {
+      const result = validateAccount({ ...BASE_ACCOUNT, inboundFolders }) as ValidationResult;
+      assert.equal(result.ok, false, `${JSON.stringify(inboundFolders)} should be refused by the schema`);
+    }
+  });
+
+  test("inboundFolders has a ui hint", () => {
+    assert.ok(channelUiHints[ "accounts.*.inboundFolders" ]?.label);
+  });
 });
 
 describe("openclaw.plugin.json credential uiHints", () => {

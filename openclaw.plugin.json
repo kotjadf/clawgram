@@ -556,6 +556,22 @@
                   ],
                   "default": "addressed",
                   "description": "When the sender sees the account \"typing\" during a turn. `addressed` — only for a message that addressed the agent (every DM does; in a group a mention or a reply to it); `never` — not at all, for an agent that mostly stays silent."
+                },
+                "inboundFolders": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    ]
+                  },
+                  "description": "Telegram chat folders whose chats may wake the agent — a folder's title as shown in Telegram (emoji included) or its numeric id. Membership is Telegram's own: the folder's chosen chats and its category rules (contacts, non-contacts, groups, channels, bots; minus excluded, muted or archived chats), read from the account and followed live as folders change. Narrows allowFrom and groups for direct and group messages alike, never widens them; history reads are unaffected. Absent or empty = no folder filter. A name that matches no folder admits nothing and is logged once."
                 }
               },
               "required": [
@@ -657,6 +673,11 @@
         "accounts.*.typingIndicator": {
           "label": "Typing Indicator",
           "help": "addressed: show typing for messages that addressed the agent (every DM). never: never show it.",
+          "advanced": true
+        },
+        "accounts.*.inboundFolders": {
+          "label": "Inbound Folders",
+          "help": "Only chats in these Telegram folders (title or id) wake the agent. Narrows allowFrom and groups; never widens them. Empty = every chat.",
           "advanced": true
         }
       }

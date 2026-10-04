@@ -83,6 +83,7 @@ import {
 export { resolveAccountOperatorIds };
 import { createOutbound } from "./outbound";
 import { handleInboundEvent } from "./inbound-pipeline";
+import { createInboundFolderFilter } from "./inbound-folders";
 
 // Словарь имён живёт в ./actions. Реэкспорт — ради вызывающих снаружи:
 // тесты и другие модули знают его по этому файлу с 2.19.4.
@@ -325,9 +326,21 @@ export const createChannelPlugin = (runtimes: RuntimeMap, pluginRuntime?: Plugin
         });
 
         const client = gram.getClient();
+
+        // Only when the account names folders; otherwise nothing is read,
+        // subscribed or timed. Folders change in the owner's Telegram while
+        // the channel runs, so their updates are followed live.
+        const inboundFolders = createInboundFolderFilter({ cfg, accountId, client, log, selfId });
+        const folderEventHandler = (update: unknown) => inboundFolders?.handleUpdate(update);
+        const folderEventBuilder = new Raw({});
+        if (inboundFolders) {
+          client.addEventHandler(folderEventHandler, folderEventBuilder);
+          inboundFolders.start();
+        }
+
         const eventBuilder = new NewMessage({});
         const eventHandler = async (event: unknown) => handleInboundEvent(event, {
-          accountId, cfg, channelRuntime, client, gram, log,
+          accountId, cfg, channelRuntime, client, gram, inboundFolders, log,
           pluginRuntime, runtimes, selfId, selfLabel, selfUsername,
         });
         client.addEventHandler(eventHandler, eventBuilder);
@@ -365,6 +378,10 @@ export const createChannelPlugin = (runtimes: RuntimeMap, pluginRuntime?: Plugin
         await waitUntilAbort(ctx.abortSignal, async () => {
           client.removeEventHandler(eventHandler, eventBuilder);
           client.removeEventHandler(joinEventHandler, joinEventBuilder);
+          if (inboundFolders) {
+            client.removeEventHandler(folderEventHandler, folderEventBuilder);
+            inboundFolders.stop();
+          }
           forgetAccount(accountId);
 
           const runtime = runtimes.get(accountId);

@@ -61,6 +61,7 @@ import { CHANNEL_ID } from './constants';
 import {
   readInboundAttachment,
   } from "./attachments";
+import type { InboundFolderGate } from "./inbound-folders";
 
 /**
  * Wires `reactToSilentMention` to this account's runtime, config and log.
@@ -131,6 +132,8 @@ export type InboundContext = {
   client: any;
   selfUsername: string | undefined;
   selfLabel: string | undefined;
+  /** The account's `inboundFolders` filter; `undefined` when it sets none. */
+  inboundFolders: InboundFolderGate | undefined;
 };
 
 /**
@@ -191,7 +194,7 @@ export function visibleReplyText(params: {
 }
 
 export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
-  const { accountId, cfg, channelRuntime, client, gram, log,
+  const { accountId, cfg, channelRuntime, client, gram, inboundFolders, log,
     pluginRuntime, runtimes, selfId, selfLabel, selfUsername } = ctx;
 
   try {
@@ -274,6 +277,28 @@ export async function handleInboundEvent(event: unknown, ctx: InboundContext) {
           accountId,
           chatId: normalized.chatId,
           messageId: normalized.messageId,
+        });
+        return;
+      }
+    }
+
+    // `inboundFolders`: only chats in the named Telegram folders get further.
+    // After the gates above, which cost nothing, and before anything below
+    // that asks Telegram about the sender or downloads an attachment. The
+    // filter narrows what allowFrom and groups admit and never widens it; a
+    // lookup it cannot make is a "no" (see src/inbound-folders.ts).
+    if (inboundFolders) {
+      const folderDecision = await inboundFolders.decide({
+        chatId: normalized.chatId,
+        chatType: normalized.chatType,
+        message: rawMessage,
+      });
+      if (!folderDecision.admit) {
+        log?.info?.("clawgram skipping inbound outside inboundFolders", {
+          accountId,
+          chatId: normalized.chatId,
+          messageId: normalized.messageId,
+          reason: folderDecision.reason,
         });
         return;
       }
