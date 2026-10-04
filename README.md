@@ -384,16 +384,22 @@ agent sees it.
   `clawgram skipping inbound outside inboundFolders`, with the chat, the
   message and the reason (`not-in-folder`, `excluded`, `muted`, `archived`,
   `lookup-failed`, `no-known-folder`, `folders-unavailable`).
-- **Which folders, and is the filter finding them.** The `folders` action
-  (gateway RPC only — `message.action` with `channel: "clawgram"`,
-  `action: "folders"`) lists the account's folders: `id`, `title` (plain
+- **Which folders, and is the filter finding them.** The gateway method
+  `clawgram.folders` (operator RPC, scope `operator.read`: `openclaw gateway
+  call clawgram.folders --params '{"accountId":"default"}' --json`; without
+  `accountId`, the first enabled account) lists the account's folders: `id`, `title` (plain
   text), `emoticon` and `color` when set, `kind` (`filter`, or `chatlist`
   for a shared folder), how many chats are pinned, included and excluded,
   and which `categories` and `exclusions` are on — counts, never the chats
   themselves. With `inboundFolders` set, `inboundFolders.entries` says what
   each entry resolves to right now and `inboundFolders.unknown` lists the
   ones that name nothing (a renamed or deleted folder). Naming folders by
-  id survives a rename; a title does not.
+  id survives a rename; a title does not. An account the config does not
+  name is `INVALID_REQUEST`; one that is configured but not connected,
+  `UNAVAILABLE`. It is a method of its own because `message.action` refuses
+  any action core has no name for (`Message action folders not supported
+  for channel clawgram`) before the channel sees it; the `folders` action
+  behind it is the same and is not offered to the agent.
 
 The filter narrows what the other gates admit and never widens it. A DM
 still needs `allowFrom`; a group still needs an entry in `groups` and its own
@@ -873,12 +879,14 @@ one fails the suite rather than the chat.
 | list chats | `dialogs` | `channel-list` | `discoverChats` |
 | describe a chat | `chatInfo` | `channel-info` (the chat arrives in `channelId`) | `readChats` |
 | where the account was added | `joins` | — (gateway RPC only) | — |
-| the account's folders, and what `inboundFolders` resolves to | `folders` | — (gateway RPC only) | — |
+| the account's folders, and what `inboundFolders` resolves to | `folders` | — (gateway method `clawgram.folders`) | — |
 | chat management | see the table below | see the table below | `manageChats` |
 
-Names outside core's vocabulary (`joins`, `folders`, `transferOwnership`, `inviteLink`) are reachable through
-the gateway RPC only. A name core does not know fails as "requires a target" and "does not accept a
-target" at once — there is no call that satisfies both, which is why this table exists.
+Names outside core's vocabulary (`joins`, `folders`, `transferOwnership`, `inviteLink`) are not offered to
+the agent. A name core does not know fails as "requires a target" and "does not accept a target" at
+once — there is no call that satisfies both, which is why this table exists. `message.action` refuses
+such a name too (`Message action … not supported for channel clawgram`, OpenClaw 2026.9.8), so
+`folders` has a gateway method of its own, `clawgram.folders`.
 
 ## Chat management
 

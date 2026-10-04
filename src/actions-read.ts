@@ -448,8 +448,10 @@ export async function handleReadAction(ctx: ActionContext): Promise<unknown> {
   // every configured entry resolves to right now, so a renamed or deleted
   // folder shows up as `unknown` instead of as a silent inbox. No gate: a
   // folder list is the account owner's own metadata and names no chat. Not
-  // offered to the agent either — core has no name for it, so it is reachable
-  // through gateway RPC only (`message.action`, `action: "folders"`).
+  // offered to the agent either. Core has no name for it, and `message.action`
+  // refuses an action core has no name for, so operators reach it through
+  // the plugin's own gateway method `clawgram.folders` (folders-gateway.ts),
+  // which runs this branch.
   if (canonical === "folders") {
     return await runRead({
       name: "folders",

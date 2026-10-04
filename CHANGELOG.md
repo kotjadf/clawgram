@@ -11,7 +11,13 @@ recorded in `git log` only.
 
 ### Added
 
-- **`folders` action** (gateway RPC only): the account's Telegram folders —
+- **`clawgram.folders` gateway method** (scope `operator.read`, params
+  `{ accountId?: string }`): the `folders` action's answer over the plugin's
+  own gateway method. `message.action` refuses actions core has no name for
+  (`Message action folders not supported for channel clawgram`), so the
+  action alone was unreachable from outside. An unknown account is
+  `INVALID_REQUEST`, a configured one that is not connected `UNAVAILABLE`.
+- **`folders` action** (behind `clawgram.folders`): the account's Telegram folders —
   id, plain-text title, icon emoji and colour, kind (`filter` / `chatlist`),
   pinned / included / excluded counts and the category and exclusion flags,
   never the peers — and, when the account sets `inboundFolders`, what each

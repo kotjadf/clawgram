@@ -1,6 +1,7 @@
 import { RuntimeMap } from './types';
 import { createChannelPlugin } from './channel';
 import { getTelegramUserbotCliDescriptors, registerTelegramUserbotCli } from './cli';
+import { registerFoldersGatewayMethod } from './folders-gateway';
 
 const plugin = {
   id: 'clawgram',
@@ -19,7 +20,17 @@ const plugin = {
 
     // api.runtime carries the media-understanding pipeline; without it an
     // inbound voice note has nothing to be turned into words with.
-    api.registerChannel({ plugin: createChannelPlugin(runtimes, api?.runtime) });
+    const channel = createChannelPlugin(runtimes, api?.runtime);
+    api.registerChannel({ plugin: channel });
+
+    // The folder picker's read. `message.action` refuses actions core has no
+    // name for, so `folders` gets a gateway method of its own — operator RPC,
+    // never a tool the agent is offered.
+    registerFoldersGatewayMethod(api, {
+      runtimes,
+      handleAction: (input) => channel.actions.handleAction(input),
+      currentConfig: () => api?.runtime?.config?.current?.() ?? api?.config,
+    });
   }
 };
 
